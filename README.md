@@ -2,7 +2,7 @@
 
 ## 安装
 
-环境要求：PHP >= 5.3.0
+环境要求：yii2
 
 1. 使用 [composer](https://getcomposer.org/)
 
