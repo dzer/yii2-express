@@ -29,7 +29,7 @@ class Express extends \yii\base\Component
      *
      * @var string
      */
-    static $url = 'http://wap.kuaidi100.com/wap_result.jsp?&fromWeb=null&';
+    static $url = 'http://www.kuaidi100.com/query?';
 
     /**
      * 物流编码
@@ -138,34 +138,46 @@ class Express extends \yii\base\Component
      * @param string $output 返回数据格式 默认返回数组，可返回json
      * @return array|bool|mixed|string
      */
-    public static function search($code, $number, $output = '')
+    public static function search($number, $code = '', $output = 'json')
     {
-        $data = array(
-            'id' => trim($code),
-            'postid' => trim($number),
-            'rand' => rand(10000, 99999)
-        );
-        //拼接url
-        self::$url = self::$url . http_build_query($data);
-        //请求接口
-        $result = self::httpGet(self::$url);
-        if (!empty($result)) {
-            $result = self::handleResult($result);
-        } else {
-            $result = array('status' => 0, 'message' => '请求错误', 'data' => array());;
+        if (!empty($number) && empty($code)) {
+            $code = self::getCode($number, 'code');
         }
-        return $output == 'json' ? json_encode($result)  : $result;
+        if (!empty($number) && !empty($code)) {
+            $data = array(
+                'type' => trim($code),
+                'postid' => trim($number)
+            );
+            //拼接url
+            self::$url = self::$url . http_build_query($data);
+            //请求接口
+            $result = self::httpGet(self::$url);
+            if (empty($result)) {
+                $result = json_encode(array('status' => 400, 'message' => '请求错误'));
+            }
+        } else {
+            $result = json_encode(array('status' => 400, 'message' => '快递单号不正确'));
+        }
+        return $output == 'json' ? $result : json_decode($result);
     }
 
     /**
-     * 查询快递编码
+     * 获取快递单所属公司
      *
-     * @param string $name 快递名称
-     * @return bool|string
+     * @param $number string 快递单号
+     * @param $output string 返回格式
+     * @return string
+     * @author dzer
      */
-    public static function getCode($name)
+    public static function getCode($number, $output = 'name')
     {
-        return array_search($name, self::$data);
+        $code = '';
+        $result = self::httpGet("http://www.kuaidi100.com/autonumber/auto?num={$number}");
+        if (!empty($result)) {
+            $name = @json_decode($result, true);
+            $code = isset($name[0]['comCode']) ? $name[0]['comCode'] : '';
+        }
+        return $output == 'name' ? (isset(self::$data[$code]) ? self::$data[$code] : $code) : $code;
     }
 
     /**
@@ -179,34 +191,6 @@ class Express extends \yii\base\Component
     }
 
     /**
-     * 正则处理查询结果
-     *
-     * @param string $result 请求的结果
-     * @return bool|mixed
-     */
-    private static function handleResult($result)
-    {
-        $arr = array();
-        preg_match_all('/<\/strong><\/p>(.+)<\/form>/s', $result, $content);
-        if (isset($content[1][0]) && !empty($content[1][0])) {
-            preg_match_all('/<p>&middot;(.{19})<br \/> (.+?)<\/p>/s', $content[1][0], $content);
-            if (!empty($content[1]) && !empty($content[2])) {
-                foreach ($content[1] as $k => $v) {
-                    $arr[] = array(
-                        'time' => $v,
-                        'content' => isset($content[2][$k]) ? $content[2][$k] : ''
-                    );
-                }
-            }
-        }
-        if (!empty($arr)) {
-            return array('status' => 1, 'message' => '查询成功', 'data' => $arr);
-        } else {
-            return array('status' => 0, 'message' => '此单号暂无物流信息，请核对订单号码是否正确', 'data' => array());
-        }
-    }
-
-    /**
      * curl请求
      *
      * @param string $url 请求连接
@@ -216,7 +200,7 @@ class Express extends \yii\base\Component
     {
         $oCurl = curl_init();
         curl_setopt($oCurl, CURLOPT_URL, $url);
-        curl_setopt($oCurl, CURLOPT_TIMEOUT, 15);
+        curl_setopt($oCurl, CURLOPT_TIMEOUT, 10);
         curl_setopt($oCurl, CURLOPT_RETURNTRANSFER, 1);
         $sContent = curl_exec($oCurl);
         $aStatus = curl_getinfo($oCurl);
